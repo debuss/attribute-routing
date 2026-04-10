@@ -1,0 +1,19 @@
+{
+  "name": "debuss-a/attribute-routing",
+  "description": "Framework-agnostic route loader that discovers routes from PHP attributes and returns router-ready RouteDefinition objects.",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Alexandre Debusschère",
+      "email": "alexandre.debusschere@hey.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Routing\\": "src/"
+    }
+  },
+  "require": {
+    "php": "^8.3"
+  }
+}
