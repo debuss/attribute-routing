@@ -7,7 +7,6 @@ use Attribute;
 /**
  * Identifies a method that supports a given set of HTTP methods.
  */
-#[Attribute(Attribute::TARGET_METHOD)]
 abstract class HttpMethod
 {
 

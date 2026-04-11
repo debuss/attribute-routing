@@ -15,6 +15,7 @@ class Controller
 {
 
     public function __construct(
-        public string $prefix = ''
+        public string $prefix = '',
+        public int $priority = 0
     ) {}
 }
