@@ -7,7 +7,7 @@ use Attribute;
 /**
  * Identifies a method that supports the HTTP PATCH method.
  */
-#[Attribute(Attribute::TARGET_METHOD)]
+#[Attribute(Attribute::TARGET_METHOD|Attribute::IS_REPEATABLE)]
 class HttpPatch extends HttpMethod
 {
 

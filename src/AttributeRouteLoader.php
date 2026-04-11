@@ -78,11 +78,13 @@ readonly class AttributeRouteLoader
                         $path,
                         [$reflectionClass->getName(), $method->getName()],
                         $methodInstance->name,
-                        $methodInstance->priority
+                        (isset($controllerInstance) ? $controllerInstance->priority : 0) + $methodInstance->priority
                     );
                 }
             }
         }
+
+        usort($routeDefinitions, fn(RouteDefinition $a, RouteDefinition $b) => $b->priority <=> $a->priority);
 
         return $routeDefinitions;
     }

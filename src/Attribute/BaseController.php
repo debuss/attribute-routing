@@ -10,10 +10,6 @@ use Attribute;
  * @see Controller
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class BaseController
+class BaseController extends Controller
 {
-
-    public function __construct(
-        public string $prefix = ''
-    ) {}
 }
