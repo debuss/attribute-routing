@@ -188,7 +188,7 @@ $routes = $loader->getRouteDefinitions();
 
 - The routes of all the loaders are sorted by descending priority. Routes sharing the same priority keep the order of the loaders, then the order of each loader.
 - [Conflicts](#conflicts) are detected across loaders: a `LogicException` is thrown if a route of the blog has the same name, or the same HTTP method and path, as a route of the shop.
-- `ChainRouteLoader` accepts any `RouteLoaderInterface`, so you can mix `AttributeRouteLoader` with your own loaders, and cache the whole chain at once with `new CachedRouteLoader(new ChainRouteLoader(...), $cacheFile)`.
+- `ChainRouteLoader` accepts any `RouteLoaderInterface`, so you can mix `AttributeRouteLoader` with your own loaders, and cache the whole chain at once (see [Caching several loaders](#caching-several-loaders)).
 
 ---
 
@@ -232,6 +232,37 @@ Only route handlers made of scalars, `null` and arrays of them can be cached (`A
 
 > [!TIP]
 > Some routers have their own cache, like FastRoute with `cachedDispatcher()`, which does not call the route definitions callback when its cache is fresh. In that case, you do not need `CachedRouteLoader`.
+
+### Caching several loaders
+
+When combining loaders with `ChainRouteLoader`, cache the whole chain rather than each loader:
+
+```php
+<?php
+
+use Routing\AttributeRouteLoader;
+use Routing\CachedRouteLoader;
+use Routing\ChainRouteLoader;
+
+$loader = new CachedRouteLoader(
+    new ChainRouteLoader(
+        new AttributeRouteLoader('App\\Blog\\Controller', __DIR__ . '/src/Blog/Controller'),
+        new AttributeRouteLoader('App\\Shop\\Controller', __DIR__ . '/src/Shop/Controller'),
+    ),
+    __DIR__ . '/var/cache/routes.php'
+);
+```
+
+Each request then only `require`s a single file: merging the routes, detecting the conflicts across loaders and sorting them only happen when the cache file is generated, and there is a single file to regenerate on deployment.
+
+Caching each loader inside the chain also works, but the chain still merges, checks and sorts all the routes on every request. It is only useful to cache some loaders and not others, for instance when a loader returns routes that must not be frozen (stored in a database), or when modules are deployed, and their cache invalidated, independently:
+
+```php
+$loader = new ChainRouteLoader(
+    new CachedRouteLoader(new AttributeRouteLoader('App\\Blog\\Controller', __DIR__ . '/src/Blog/Controller'), __DIR__ . '/var/cache/blog.php'),
+    new DatabaseRouteLoader($connection), // your own RouteLoaderInterface, not cached
+);
+```
 
 ---
 
