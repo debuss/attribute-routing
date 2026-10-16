@@ -9,10 +9,11 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionAttribute;
 use ReflectionClass;
-use Routing\Attribute\{AsController, Route};
+use Routing\Attribute\{AsController, Middleware, Route};
 use ReflectionException;
+use ReflectionMethod;
 use SplFileInfo;
-use function array_filter, array_merge, class_exists, count, explode, implode, interface_exists, is_dir, rtrim, sprintf, str_replace, strlen, substr, trait_exists, trim, usort;
+use function array_filter, array_map, array_merge, class_exists, count, explode, implode, interface_exists, is_dir, rtrim, sprintf, str_replace, strlen, substr, trait_exists, trim, usort;
 
 readonly class AttributeRouteLoader implements RouteLoaderInterface
 {
@@ -84,17 +85,24 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
             /** @var AsController $controller */
             $controller = $controllerAttributes[0]->newInstance();
             $controllerPrefix = trim($controller->prefix, '/');
+            $controllerMiddlewares = $this->getMiddlewares($reflectionClass);
 
             foreach ($reflectionClass->getMethods() as $method) {
                 $attributes = $method->getAttributes(Route::class, ReflectionAttribute::IS_INSTANCEOF);
 
-                if (count($attributes) > 0 && !$method->isPublic()) {
+                if (count($attributes) === 0) {
+                    continue;
+                }
+
+                if (!$method->isPublic()) {
                     throw new LogicException(sprintf(
                         'The method "%s::%s()" has a route attribute but is not public.',
                         $reflectionClass->getName(),
                         $method->getName()
                     ));
                 }
+
+                $middlewares = array_merge($controllerMiddlewares, $this->getMiddlewares($method));
 
                 foreach ($attributes as $attribute) {
                     /** @var Route $route */
@@ -112,7 +120,8 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
                         $path,
                         [$reflectionClass->getName(), $method->getName()],
                         $route->name,
-                        $controller->priority + $route->priority
+                        $controller->priority + $route->priority,
+                        $middlewares
                     );
                 }
             }
@@ -121,5 +130,19 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
         usort($routeDefinitions, fn(RouteDefinition $a, RouteDefinition $b) => $b->priority <=> $a->priority);
 
         return $routeDefinitions;
+    }
+
+    /**
+     * @param ReflectionClass<object>|ReflectionMethod $reflection
+     * @return string[] The middlewares of every middleware attribute, in their order of declaration.
+     */
+    private function getMiddlewares(ReflectionClass|ReflectionMethod $reflection): array
+    {
+        $attributes = $reflection->getAttributes(Middleware::class, ReflectionAttribute::IS_INSTANCEOF);
+
+        return array_merge([], ...array_map(
+            fn(ReflectionAttribute $attribute) => $attribute->newInstance()->middlewares,
+            $attributes
+        ));
     }
 }

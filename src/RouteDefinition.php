@@ -3,7 +3,7 @@
 namespace Routing;
 
 /**
- * Represents a route definition, including the HTTP methods, path, handler, name, and priority.
+ * Represents a route definition, including the HTTP methods, path, handler, name, priority and middlewares.
  *
  * This route definition is to be used to register routes inside your router like FastRoute, Aura Router, ...
  */
@@ -16,6 +16,8 @@ final readonly class RouteDefinition
         public string $path,
         public mixed $handler,
         public string $name = '',
-        public int $priority = 0
+        public int $priority = 0,
+        /** @var string[] $middlewares */
+        public array $middlewares = []
     ) {}
 }

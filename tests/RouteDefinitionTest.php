@@ -11,7 +11,7 @@ use Routing\RouteDefinition;
 final class RouteDefinitionTest extends TestCase
 {
 
-    public function testNameAndPriorityHaveDefaultValues(): void
+    public function testNamePriorityAndMiddlewaresHaveDefaultValues(): void
     {
         $route = new RouteDefinition(['GET'], '/users', 'handler');
 
@@ -20,18 +20,20 @@ final class RouteDefinitionTest extends TestCase
         $this->assertSame('handler', $route->handler);
         $this->assertSame('', $route->name);
         $this->assertSame(0, $route->priority);
+        $this->assertSame([], $route->middlewares);
     }
 
     public function testItExposesAllItsProperties(): void
     {
         $handler = static fn() => null;
-        $route = new RouteDefinition(['GET', 'HEAD'], '/users/{id}', $handler, 'users.show', -3);
+        $route = new RouteDefinition(['GET', 'HEAD'], '/users/{id}', $handler, 'users.show', -3, ['App\\Middleware\\Auth']);
 
         $this->assertSame(['GET', 'HEAD'], $route->methods);
         $this->assertSame('/users/{id}', $route->path);
         $this->assertSame($handler, $route->handler);
         $this->assertSame('users.show', $route->name);
         $this->assertSame(-3, $route->priority);
+        $this->assertSame(['App\\Middleware\\Auth'], $route->middlewares);
     }
 
     public function testItIsReadonly(): void
