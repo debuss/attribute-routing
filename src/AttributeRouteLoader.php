@@ -14,7 +14,7 @@ use ReflectionException;
 use SplFileInfo;
 use function array_filter, array_merge, class_exists, count, explode, implode, interface_exists, is_dir, rtrim, sprintf, str_replace, strlen, substr, trait_exists, trim, usort;
 
-readonly class AttributeRouteLoader
+readonly class AttributeRouteLoader implements RouteLoaderInterface
 {
 
     private string $namespace;
