@@ -3,7 +3,7 @@
 namespace Routing\Tests;
 
 use Error;
-use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\{CoversClass, DataProvider};
 use PHPUnit\Framework\TestCase;
 use Routing\RouteDefinition;
 
@@ -18,9 +18,34 @@ final class RouteDefinitionTest extends TestCase
         $this->assertSame(['GET'], $route->methods);
         $this->assertSame('/users', $route->path);
         $this->assertSame('handler', $route->handler);
-        $this->assertSame('', $route->name);
+        $this->assertSame('/users^GET', $route->name);
         $this->assertSame(0, $route->priority);
         $this->assertSame([], $route->middlewares);
+    }
+
+    /**
+     * @return iterable<string, array{string[], string, string}>
+     */
+    public static function defaultNameProvider(): iterable
+    {
+        yield 'single HTTP method' => [['GET'], '/users/{id}', '/users/{id}^GET'];
+        yield 'several HTTP methods, in their order' => [['GET', 'POST', 'DELETE'], '/api/user/{id}', '/api/user/{id}^GET:POST:DELETE'];
+        yield 'no HTTP method' => [[], '/users', '/users'];
+        yield 'root path' => [['GET'], '/', '/^GET'];
+    }
+
+    /**
+     * @param string[] $methods
+     */
+    #[DataProvider('defaultNameProvider')]
+    public function testTheNameIsGeneratedFromThePathAndTheHttpMethodsWhenNotGiven(array $methods, string $path, string $expectedName): void
+    {
+        $this->assertSame($expectedName, (new RouteDefinition($methods, $path, 'handler'))->name);
+    }
+
+    public function testAGivenNameIsKept(): void
+    {
+        $this->assertSame('users.show', (new RouteDefinition(['GET'], '/users/{id}', 'handler', 'users.show'))->name);
     }
 
     public function testItExposesAllItsProperties(): void

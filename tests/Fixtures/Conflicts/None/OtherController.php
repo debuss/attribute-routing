@@ -8,7 +8,7 @@ use Routing\Attribute\{AsController, Get};
 class OtherController
 {
 
-    // Routes without name never conflict
+    // Routes without name get distinct generated names
     #[Get]
     public function index(): void {}
 }

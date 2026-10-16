@@ -25,19 +25,7 @@ final readonly class RouteConflictChecker
         foreach ($routeDefinitions as $routeDefinition) {
             $handler = $this->describeHandler($routeDefinition->handler);
 
-            if ($routeDefinition->name !== '') {
-                if (isset($handlersByName[$routeDefinition->name])) {
-                    throw new LogicException(sprintf(
-                        'The route name "%s" is used by both "%s" and "%s".',
-                        $routeDefinition->name,
-                        $handlersByName[$routeDefinition->name],
-                        $handler
-                    ));
-                }
-
-                $handlersByName[$routeDefinition->name] = $handler;
-            }
-
+            // Checked first: for routes without explicit name, it is clearer than the conflict of their generated names
             foreach ($routeDefinition->methods as $method) {
                 $methodAndPath = $method . ' ' . $routeDefinition->path;
 
@@ -52,6 +40,17 @@ final readonly class RouteConflictChecker
 
                 $handlersByMethodAndPath[$methodAndPath] = $handler;
             }
+
+            if (isset($handlersByName[$routeDefinition->name])) {
+                throw new LogicException(sprintf(
+                    'The route name "%s" is used by both "%s" and "%s".',
+                    $routeDefinition->name,
+                    $handlersByName[$routeDefinition->name],
+                    $handler
+                ));
+            }
+
+            $handlersByName[$routeDefinition->name] = $handler;
         }
     }
 

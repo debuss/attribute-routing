@@ -33,7 +33,7 @@ final class AttributeRouteLoaderTest extends TestCase
             [
                 'DELETE /users/{id} ' . UserController::class . '::destroy users.destroy 0',
                 'GET /admin/dashboard ' . DashboardController::class . '::index admin.dashboard 0',
-                'GET /admin/health ' . DashboardController::class . '::health  0',
+                'GET /admin/health ' . DashboardController::class . '::health /admin/health^GET 0',
                 'GET /api/v1/products/{id} ' . ProductController::class . '::show products.show 0',
                 'GET /child/from-trait ' . ChildController::class . '::fromTrait from-trait 0',
                 'GET /child/inherited ' . ChildController::class . '::inherited inherited 0',
@@ -41,10 +41,10 @@ final class AttributeRouteLoaderTest extends TestCase
                 'GET /users/{id} ' . UserController::class . '::show users.show 0',
                 'GET,POST /users/search ' . UserController::class . '::search users.search 0',
                 'HEAD /api/v1/products/{id} ' . ProductController::class . '::show products.head 0',
-                'OPTIONS /api/v1/products ' . ProductController::class . '::options  0',
-                'PATCH /api/v1/products/{id} ' . ProductController::class . '::update  0',
+                'OPTIONS /api/v1/products ' . ProductController::class . '::options /api/v1/products^OPTIONS 0',
+                'PATCH /api/v1/products/{id} ' . ProductController::class . '::update /api/v1/products/{id}^PATCH 0',
                 'POST /users ' . UserController::class . '::store users.store 0',
-                'PUT /api/v1/products/{id} ' . ProductController::class . '::update  0',
+                'PUT /api/v1/products/{id} ' . ProductController::class . '::update /api/v1/products/{id}^PUT 0',
             ],
             $this->describe($this->load('Basic'))
         );
@@ -201,12 +201,12 @@ final class AttributeRouteLoaderTest extends TestCase
         $this->assertSame(
             [
                 'GET /admin/dashboard ' . DashboardController::class . '::index admin.dashboard 0',
-                'GET /admin/health ' . DashboardController::class . '::health  0',
+                'GET /admin/health ' . DashboardController::class . '::health /admin/health^GET 0',
                 'GET /api/v1/products/{id} ' . ProductController::class . '::show products.show 0',
                 'HEAD /api/v1/products/{id} ' . ProductController::class . '::show products.head 0',
-                'PUT /api/v1/products/{id} ' . ProductController::class . '::update  0',
-                'PATCH /api/v1/products/{id} ' . ProductController::class . '::update  0',
-                'OPTIONS /api/v1/products ' . ProductController::class . '::options  0',
+                'PUT /api/v1/products/{id} ' . ProductController::class . '::update /api/v1/products/{id}^PUT 0',
+                'PATCH /api/v1/products/{id} ' . ProductController::class . '::update /api/v1/products/{id}^PATCH 0',
+                'OPTIONS /api/v1/products ' . ProductController::class . '::options /api/v1/products^OPTIONS 0',
                 'GET /child/from-trait ' . ChildController::class . '::fromTrait from-trait 0',
                 'GET /child/inherited ' . ChildController::class . '::inherited inherited 0',
                 'GET /users ' . UserController::class . '::index users.index 0',
