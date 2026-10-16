@@ -28,6 +28,7 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer
+          ini-values: opcache.enable_cli=1
 
       - name: Validate composer.json
         run: composer validate --strict
