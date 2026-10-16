@@ -55,6 +55,28 @@ final class RouteConflictCheckerTest extends TestCase
         ]);
     }
 
+    public function testAnExplicitNameEqualToAGeneratedNameThrowsAnException(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('The route name "/users^GET" is used by both "index" and "other".');
+
+        (new RouteConflictChecker())->check([
+            new RouteDefinition(['GET'], '/users', 'index'),
+            new RouteDefinition(['GET'], '/other', 'other', '/users^GET'),
+        ]);
+    }
+
+    public function testTheHttpMethodAndPathConflictIsReportedBeforeTheNameConflict(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('The route "GET /users" is defined by both "index" and "list".');
+
+        (new RouteConflictChecker())->check([
+            new RouteDefinition(['GET'], '/users', 'index', 'users'),
+            new RouteDefinition(['GET'], '/users', 'list', 'users'),
+        ]);
+    }
+
     /**
      * @return iterable<string, array{mixed, string}>
      */
