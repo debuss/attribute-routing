@@ -266,7 +266,7 @@ class UserController
 }
 ```
 
-Priorities can be negative. Routes sharing the same priority are returned in a deterministic order: sorted by controller class name, then in the order of the controller methods (as returned by reflection: methods declared in the class, then those inherited from its parents). The order does not depend on the filesystem, so it is the same on every machine and the cache files of `CachedRouteLoader` are reproducible. Still, use priorities when the registration order matters, rather than relying on class names.
+Priorities can be negative. Routes sharing the same priority are returned in a deterministic order: sorted by controller class name, then by method: first the methods declared in the controller, in their order of declaration, then the methods inherited from a parent class or coming from a trait, by name. Several route attributes on a method keep their order of declaration. The order depends neither on the filesystem nor on the PHP version, so it is the same on every machine and the cache files of `CachedRouteLoader` are reproducible. Still, use priorities when the registration order matters, rather than relying on class names.
 
 ---
 

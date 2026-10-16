@@ -95,7 +95,7 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
             $controllerPrefix = trim($controller->prefix, '/');
             $controllerMiddlewares = $this->getMiddlewares($reflectionClass);
 
-            foreach ($reflectionClass->getMethods() as $method) {
+            foreach ($this->getSortedMethods($reflectionClass) as $method) {
                 $attributes = $method->getAttributes(Route::class, ReflectionAttribute::IS_INSTANCEOF);
 
                 if (count($attributes) === 0) {
@@ -141,6 +141,26 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
         usort($routeDefinitions, fn(RouteDefinition $a, RouteDefinition $b) => $b->priority <=> $a->priority);
 
         return $routeDefinitions;
+    }
+
+    /**
+     * The order of `ReflectionClass::getMethods()` differs between PHP versions for the methods coming from traits and
+     * parent classes, so the methods are sorted explicitly: first the methods declared in the controller file, in their
+     * order of declaration, then the other ones (inherited or from traits) by name.
+     *
+     * @param ReflectionClass<object> $reflectionClass
+     * @return ReflectionMethod[]
+     */
+    private function getSortedMethods(ReflectionClass $reflectionClass): array
+    {
+        $sortKey = fn(ReflectionMethod $method) => $method->getFileName() === $reflectionClass->getFileName()
+            ? [0, (int)$method->getStartLine(), '']
+            : [1, 0, $method->getName()];
+
+        $methods = $reflectionClass->getMethods();
+        usort($methods, fn(ReflectionMethod $a, ReflectionMethod $b) => $sortKey($a) <=> $sortKey($b));
+
+        return $methods;
     }
 
     /**

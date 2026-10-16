@@ -219,6 +219,17 @@ final class AttributeRouteLoaderTest extends TestCase
         );
     }
 
+    public function testTheMethodsDeclaredInTheControllerComeFirstThenTheOtherOnesByName(): void
+    {
+        $this->assertSame(
+            ['GET /order/own-z', 'POST /order/own-a', 'GET /order/own-a', 'GET /order/parent-a', 'GET /order/parent-b', 'GET /order/trait-a', 'GET /order/trait-z'],
+            array_map(
+                fn(RouteDefinition $route) => implode(',', $route->methods) . ' ' . $route->path,
+                $this->load('Order')
+            )
+        );
+    }
+
     /**
      * @return iterable<string, array{string, string}>
      */
