@@ -45,7 +45,7 @@ final class CachedRouteLoaderTest extends TestCase
 
     public function testItReadsTheCacheFileInsteadOfCallingTheDecoratedLoader(): void
     {
-        $routes = [new RouteDefinition(['GET'], '/users', ['App\\UserController', 'index'], 'users.index', 3)];
+        $routes = [new RouteDefinition(['GET'], '/users', ['App\\UserController', 'index'], 'users.index', 3, ['App\\Middleware\\Auth'])];
         $stub = new RouteLoaderStub($routes);
 
         (new CachedRouteLoader($stub, $this->cacheFile))->getRouteDefinitions();
@@ -55,9 +55,19 @@ final class CachedRouteLoaderTest extends TestCase
         $this->assertEquals($routes, $cachedRoutes);
     }
 
-    public function testCachedRoutesAreEqualToTheRoutesOfTheAttributeRouteLoader(): void
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function fixtureProvider(): iterable
     {
-        $attributeLoader = new AttributeRouteLoader('Routing\\Tests\\Fixtures\\Basic', __DIR__ . '/Fixtures/Basic');
+        yield 'basic' => ['Basic'];
+        yield 'middlewares' => ['Middlewares'];
+    }
+
+    #[DataProvider('fixtureProvider')]
+    public function testCachedRoutesAreEqualToTheRoutesOfTheAttributeRouteLoader(string $fixture): void
+    {
+        $attributeLoader = new AttributeRouteLoader('Routing\\Tests\\Fixtures\\' . $fixture, __DIR__ . '/Fixtures/' . $fixture);
         $expected = $attributeLoader->getRouteDefinitions();
 
         (new CachedRouteLoader($attributeLoader, $this->cacheFile))->warmUp();

@@ -32,8 +32,9 @@ composer require debuss-a/attribute-routing
 | `#[Delete(path?, name?, priority?)]`         | Method | Maps the method to `DELETE` requests.                                                                      |
 | `#[Head(path?, name?, priority?)]`           | Method | Maps the method to `HEAD` requests.                                                                        |
 | `#[Options(path?, name?, priority?)]`        | Method | Maps the method to `OPTIONS` requests.                                                                     |
+| `#[Middleware(...middlewares)]`              | Both   | Adds middlewares to every route of the class, or to the routes of the method.                              |
 | `AttributeRouteLoader`                       | —      | Scans a directory for controllers and returns `RouteDefinition[]`.                                         |
-| `RouteDefinition`                            | —      | Value object holding `methods`, `path`, `handler`, `name`, and `priority`.                                 |
+| `RouteDefinition`                            | —      | Value object holding `methods`, `path`, `handler`, `name`, `priority` and `middlewares`.                   |
 | `CachedRouteLoader`                          | —      | Decorates a loader to cache its route definitions in a PHP file.                                           |
 | `RouteLoaderInterface`                       | —      | Implemented by both loaders, exposes `getRouteDefinitions()`.                                              |
 
@@ -121,6 +122,7 @@ $route->path;      // string    – e.g. '/users/{id}'
 $route->handler;   // array     – [ClassName::class, 'methodName']
 $route->name;      // string    – route name (empty string if not set)
 $route->priority;  // int       – route priority (0 by default)
+$route->middlewares; // string[] – e.g. [AuthMiddleware::class] (empty array if not set)
 ```
 
 ### 3. Register routes in your router
@@ -256,6 +258,78 @@ class UserController
 ```
 
 Priorities can be negative. The order of routes sharing the same priority is not guaranteed: use priorities when the registration order matters.
+
+---
+
+## Middlewares
+
+`#[Middleware]` adds one or several middlewares to the routes. Set on a controller, it applies to every route of the controller; set on a method, it applies to the routes of this method only. It is repeatable:
+
+```php
+use Routing\Attribute\{AsController, Get, Middleware};
+
+#[AsController('/admin')]
+#[Middleware(AuthMiddleware::class, AdminMiddleware::class)]
+class DashboardController
+{
+    #[Get('/stats', name: 'admin.stats')]
+    #[Middleware(RateLimitMiddleware::class)]
+    public function stats(): void { /* … */ }
+}
+
+// $route->middlewares === [AuthMiddleware::class, AdminMiddleware::class, RateLimitMiddleware::class]
+```
+
+- The controller middlewares come first, followed by the method middlewares, each in their order of declaration. Duplicates are kept.
+- Middlewares are identifiers, usually class names (`class-string`), that are **neither instantiated nor validated**: any string understood by your application works, like an alias (`'auth:api'`). This keeps the route definitions cacheable and lets your container build the middlewares with their dependencies.
+- Like routes, middlewares set on a method of an abstract parent class or of a trait are inherited. Middlewares set on an abstract parent class are ignored, since PHP class attributes are not inherited.
+- Middlewares set on a method without route attribute are ignored.
+- An `InvalidArgumentException` is thrown if no middleware, or an empty string, is given.
+
+Like `#[AsController]` and `#[Route]`, `#[Middleware]` can be extended to create your own middleware attributes:
+
+```php
+use Attribute;
+use Routing\Attribute\Middleware;
+
+#[Attribute(Attribute::TARGET_CLASS|Attribute::TARGET_METHOD|Attribute::IS_REPEATABLE)]
+class Authenticated extends Middleware
+{
+    public function __construct()
+    {
+        parent::__construct(AuthMiddleware::class);
+    }
+}
+```
+
+### Registering middlewares in your router
+
+Most routers have no notion of per-route middlewares, so you have to keep them alongside the handler and run them when dispatching the route. For instance with FastRoute, which stores any value as handler:
+
+```php
+$dispatcher = FastRoute\simpleDispatcher(function (RouteCollector $r) use ($loader) {
+    foreach ($loader->getRouteDefinitions() as $route) {
+        $r->addRoute($route->methods, $route->path, [
+            'handler' => $route->handler,
+            'middlewares' => $route->middlewares,
+        ]);
+    }
+});
+
+[$status, $routeData, $vars] = $dispatcher->dispatch($request->getMethod(), $request->getUri()->getPath());
+// $routeData['middlewares'] contains the middleware identifiers, to resolve with your container
+```
+
+With Aura Router, use the route extras:
+
+```php
+foreach ($loader->getRouteDefinitions() as $route) {
+    $map->route($route->name, $route->path)
+        ->allows($route->methods)
+        ->handler($route->handler)
+        ->extras(['middlewares' => $route->middlewares]);
+}
+```
 
 ---
 

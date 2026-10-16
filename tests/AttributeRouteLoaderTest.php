@@ -11,6 +11,7 @@ use Routing\RouteDefinition;
 use Routing\Tests\Fixtures\Basic\Admin\DashboardController;
 use Routing\Tests\Fixtures\Basic\Api\ProductController;
 use Routing\Tests\Fixtures\Basic\{ChildController, UserController};
+use Routing\Tests\Fixtures\Middlewares\MiddlewareController;
 use Routing\Tests\Fixtures\NonPublic\PrivateMethod\PrivateRouteController;
 use Routing\Tests\Fixtures\NonPublic\ProtectedMethod\ProtectedRouteController;
 use Routing\Tests\Fixtures\NotAConcreteClass\AbstractType\AbstractController;
@@ -148,6 +149,50 @@ final class AttributeRouteLoaderTest extends TestCase
         $this->assertSame(
             [15, 10, 1, 0, 0, -10],
             array_column($this->load('Priority'), 'priority')
+        );
+    }
+
+    public function testRoutesHaveNoMiddlewaresByDefault(): void
+    {
+        foreach ($this->load('Basic') as $route) {
+            $this->assertSame([], $route->middlewares);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string[]}>
+     */
+    public static function middlewaresProvider(): iterable
+    {
+        $controllerMiddlewares = ['App\\Middleware\\First', 'App\\Middleware\\Second', 'App\\Middleware\\Authenticate', 'App\\Middleware\\Third'];
+
+        yield 'no middleware' => ['no-middleware', []];
+        yield 'method middlewares only' => ['method-only', ['App\\Middleware\\MethodOnly']];
+        yield 'controller middlewares only, in their order of declaration' => ['controller-only', $controllerMiddlewares];
+        yield 'controller then method middlewares, duplicates kept' => ['with-method', [...$controllerMiddlewares, 'App\\Middleware\\MethodFirst', 'App\\Middleware\\MethodSecond', 'App\\Middleware\\Third']];
+        yield 'first route of a method' => ['shared.get', [...$controllerMiddlewares, 'App\\Middleware\\Shared']];
+        yield 'second route of a method' => ['shared.post', [...$controllerMiddlewares, 'App\\Middleware\\Shared']];
+        yield 'method inherited from an abstract class, whose class middlewares are ignored' => ['inherited', [...$controllerMiddlewares, 'App\\Middleware\\FromAbstractMethod']];
+        yield 'method from a trait' => ['from-trait', [...$controllerMiddlewares, 'App\\Middleware\\FromTraitMethod']];
+    }
+
+    /**
+     * @param string[] $expectedMiddlewares
+     */
+    #[DataProvider('middlewaresProvider')]
+    public function testTheMiddlewaresAreTheControllerMiddlewaresFollowedByTheMethodMiddlewares(string $routeName, array $expectedMiddlewares): void
+    {
+        $routes = array_column($this->load('Middlewares'), null, 'name');
+
+        $this->assertArrayHasKey($routeName, $routes);
+        $this->assertSame($expectedMiddlewares, $routes[$routeName]->middlewares);
+    }
+
+    public function testAMethodWithMiddlewaresButWithoutRouteIsIgnored(): void
+    {
+        $this->assertNotContains(
+            [MiddlewareController::class, 'withoutRoute'],
+            array_column($this->load('Middlewares'), 'handler')
         );
     }
 

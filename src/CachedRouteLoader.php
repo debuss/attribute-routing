@@ -73,13 +73,14 @@ final readonly class CachedRouteLoader implements RouteLoaderInterface
         $lines = [];
         foreach ($routeDefinitions as $routeDefinition) {
             $lines[] = sprintf(
-                '    new \\%s(methods: %s, path: %s, handler: %s, name: %s, priority: %s),',
+                '    new \\%s(methods: %s, path: %s, handler: %s, name: %s, priority: %s, middlewares: %s),',
                 RouteDefinition::class,
                 $this->export($routeDefinition->methods),
                 $this->export($routeDefinition->path),
                 $this->export($routeDefinition->handler),
                 $this->export($routeDefinition->name),
-                $this->export($routeDefinition->priority)
+                $this->export($routeDefinition->priority),
+                $this->export($routeDefinition->middlewares)
             );
         }
 
