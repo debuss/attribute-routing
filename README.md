@@ -35,8 +35,9 @@ composer require debuss-a/attribute-routing
 | `#[Middleware(...middlewares)]`              | Both   | Adds middlewares to every route of the class, or to the routes of the method.                              |
 | `AttributeRouteLoader`                       | —      | Scans a directory for controllers and returns `RouteDefinition[]`.                                         |
 | `RouteDefinition`                            | —      | Value object holding `methods`, `path`, `handler`, `name`, `priority` and `middlewares`.                   |
+| `ChainRouteLoader`                           | —      | Merges the route definitions of several loaders, for instance one per module.                              |
 | `CachedRouteLoader`                          | —      | Decorates a loader to cache its route definitions in a PHP file.                                           |
-| `RouteLoaderInterface`                       | —      | Implemented by both loaders, exposes `getRouteDefinitions()`.                                              |
+| `RouteLoaderInterface`                       | —      | Implemented by every loader, exposes `getRouteDefinitions()`.                                              |
 
 ---
 
@@ -167,6 +168,30 @@ foreach ($loader->getRouteDefinitions() as $route) {
 
 ---
 
+## Loading several directories
+
+`AttributeRouteLoader` scans a single directory, matching a single namespace. To load the controllers of several directories, like the modules of an application, combine several loaders with `ChainRouteLoader`:
+
+```php
+<?php
+
+use Routing\AttributeRouteLoader;
+use Routing\ChainRouteLoader;
+
+$loader = new ChainRouteLoader(
+    new AttributeRouteLoader('App\\Blog\\Controller', __DIR__ . '/src/Blog/Controller'),
+    new AttributeRouteLoader('App\\Shop\\Controller', __DIR__ . '/src/Shop/Controller'),
+);
+
+$routes = $loader->getRouteDefinitions();
+```
+
+- The routes of all the loaders are sorted by descending priority. Routes sharing the same priority keep the order of the loaders, then the order of each loader.
+- [Conflicts](#conflicts) are detected across loaders: a `LogicException` is thrown if a route of the blog has the same name, or the same HTTP method and path, as a route of the shop.
+- `ChainRouteLoader` accepts any `RouteLoaderInterface`, so you can mix `AttributeRouteLoader` with your own loaders, and cache the whole chain at once with `new CachedRouteLoader(new ChainRouteLoader(...), $cacheFile)`.
+
+---
+
 ## Caching
 
 `AttributeRouteLoader` scans the directory, autoloads every controller and reads their attributes through reflection on each call. With a shared-nothing runtime like PHP-FPM, this happens on every request, so you should cache the route definitions in production.
@@ -222,7 +247,7 @@ Only route handlers made of scalars, `null` and arrays of them can be cached (`A
 
 ### Conflicts
 
-A `LogicException`, naming both handlers, is thrown if two routes:
+A `LogicException`, naming both handlers, is thrown if two routes (of the same loader, or of different loaders combined with `ChainRouteLoader`):
 
 - have the same name (routes without name never conflict),
 - or have the same HTTP method and the same path, once normalized: `#[Get('/')]` and `#[Get('')]` on a controller prefixed with `/users` both define `GET /users`.

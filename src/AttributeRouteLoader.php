@@ -135,7 +135,7 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
             }
         }
 
-        $this->checkConflicts($routeDefinitions);
+        (new RouteConflictChecker())->check($routeDefinitions);
 
         // usort() is stable: routes sharing the same priority keep their discovery order
         usort($routeDefinitions, fn(RouteDefinition $a, RouteDefinition $b) => $b->priority <=> $a->priority);
@@ -161,50 +161,6 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
         usort($methods, fn(ReflectionMethod $a, ReflectionMethod $b) => $sortKey($a) <=> $sortKey($b));
 
         return $methods;
-    }
-
-    /**
-     * @param RouteDefinition[] $routeDefinitions
-     * @throws LogicException If two routes have the same name, or the same HTTP method and path.
-     */
-    private function checkConflicts(array $routeDefinitions): void
-    {
-        $handlersByName = [];
-        $handlersByMethodAndPath = [];
-
-        foreach ($routeDefinitions as $routeDefinition) {
-            /** @var array{class-string, string} $handler */
-            $handler = $routeDefinition->handler;
-            $handler = sprintf('%s::%s()', ...$handler);
-
-            if ($routeDefinition->name !== '') {
-                if (isset($handlersByName[$routeDefinition->name])) {
-                    throw new LogicException(sprintf(
-                        'The route name "%s" is used by both "%s" and "%s".',
-                        $routeDefinition->name,
-                        $handlersByName[$routeDefinition->name],
-                        $handler
-                    ));
-                }
-
-                $handlersByName[$routeDefinition->name] = $handler;
-            }
-
-            foreach ($routeDefinition->methods as $method) {
-                $methodAndPath = $method . ' ' . $routeDefinition->path;
-
-                if (isset($handlersByMethodAndPath[$methodAndPath])) {
-                    throw new LogicException(sprintf(
-                        'The route "%s" is defined by both "%s" and "%s".',
-                        $methodAndPath,
-                        $handlersByMethodAndPath[$methodAndPath],
-                        $handler
-                    ));
-                }
-
-                $handlersByMethodAndPath[$methodAndPath] = $handler;
-            }
-        }
     }
 
     /**
