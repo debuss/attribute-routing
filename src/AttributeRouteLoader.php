@@ -15,7 +15,7 @@ use ReflectionMethod;
 use SplFileInfo;
 use function array_filter, array_map, array_merge, class_exists, count, explode, implode, interface_exists, is_dir, rtrim, sort, sprintf, str_replace, strlen, substr, trait_exists, trim, usort;
 
-readonly class AttributeRouteLoader implements RouteLoaderInterface
+readonly class AttributeRouteLoader implements ResourceAwareRouteLoaderInterface
 {
 
     private string $namespace;
@@ -32,6 +32,17 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
 
         $this->namespace = rtrim($namespace, '\\') . '\\';
         $this->path = rtrim($path, '\\/');
+    }
+
+    /**
+     * The scanned directory. The classes of the controllers located outside of it, like a parent class, a trait or a
+     * custom attribute, are not tracked.
+     *
+     * @return string[]
+     */
+    public function getResources(): array
+    {
+        return [$this->path];
     }
 
     /**

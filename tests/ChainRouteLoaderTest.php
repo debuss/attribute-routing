@@ -6,7 +6,7 @@ use LogicException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Routing\{AttributeRouteLoader, ChainRouteLoader, RouteDefinition};
-use Routing\Tests\Fixtures\RouteLoaderStub;
+use Routing\Tests\Fixtures\{ResourceAwareRouteLoaderStub, RouteLoaderStub};
 use function array_column, count, rsort;
 
 #[CoversClass(ChainRouteLoader::class)]
@@ -77,6 +77,22 @@ final class ChainRouteLoaderTest extends TestCase
         $this->expectExceptionMessage('The route "GET /" is defined by both "BlogController::index" and "ShopController::index".');
 
         (new ChainRouteLoader($first, $second))->getRouteDefinitions();
+    }
+
+    public function testItsResourcesAreTheResourcesOfTheResourceAwareLoaders(): void
+    {
+        $chain = new ChainRouteLoader(
+            new ResourceAwareRouteLoaderStub(resources: ['/app/Blog', '/app/routes.php']),
+            new RouteLoaderStub(),
+            new ResourceAwareRouteLoaderStub(resources: ['/app/Shop', '/app/routes.php']),
+        );
+
+        $this->assertSame(['/app/Blog', '/app/routes.php', '/app/Shop'], $chain->getResources());
+    }
+
+    public function testAnEmptyChainHasNoResources(): void
+    {
+        $this->assertSame([], (new ChainRouteLoader())->getResources());
     }
 
     public function testItChainsAttributeRouteLoaders(): void

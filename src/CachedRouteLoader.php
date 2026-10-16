@@ -2,9 +2,13 @@
 
 namespace Routing;
 
+use FilesystemIterator;
 use LogicException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use RuntimeException;
-use function array_is_list, bin2hex, dirname, file_put_contents, filter_var, function_exists, get_debug_type, implode, ini_get, is_array, is_dir, is_file, is_scalar, mkdir, opcache_invalidate, random_bytes, rename, sprintf, unlink, var_export;
+use SplFileInfo;
+use function array_is_list, bin2hex, clearstatcache, dirname, file_exists, file_put_contents, filemtime, filter_var, function_exists, get_debug_type, implode, ini_get, is_array, is_dir, is_file, is_scalar, mkdir, opcache_invalidate, random_bytes, rename, sprintf, unlink, var_export;
 
 /**
  * Caches the route definitions of another loader in a PHP file.
@@ -12,15 +16,21 @@ use function array_is_list, bin2hex, dirname, file_put_contents, filter_var, fun
  * The first call generates the cache file, the next ones only `require` it, so that the decorated loader is not
  * called anymore. With OPcache enabled, the cache file is kept in shared memory and reading it costs nearly nothing.
  *
- * The cache file is never invalidated automatically: call `clear()` or `warmUp()` when your routes change (on
- * deployment for instance), or do not use this loader in development.
+ * By default, the cache file is never invalidated automatically: call `clear()` or `warmUp()` when your routes change
+ * (on deployment for instance). In debug mode, meant for development, the cache file is regenerated when a resource of
+ * the decorated loader (see `ResourceAwareRouteLoaderInterface`) has been modified since its generation.
  */
 final readonly class CachedRouteLoader implements RouteLoaderInterface
 {
 
+    /**
+     * @param bool $debug Regenerates the cache file when a resource of the decorated loader has been modified since its
+     *                    generation. It costs a `stat()` per file of the resources, so it is meant for development.
+     */
     public function __construct(
         private RouteLoaderInterface $loader,
-        private string $cacheFile
+        private string $cacheFile,
+        private bool $debug = false
     ) {}
 
     /**
@@ -30,7 +40,7 @@ final readonly class CachedRouteLoader implements RouteLoaderInterface
      */
     public function getRouteDefinitions(): array
     {
-        if (is_file($this->cacheFile)) {
+        if (is_file($this->cacheFile) && (!$this->debug || $this->isFresh())) {
             /** @var RouteDefinition[] $routeDefinitions */
             $routeDefinitions = require $this->cacheFile;
 
@@ -61,6 +71,63 @@ final readonly class CachedRouteLoader implements RouteLoaderInterface
         if (is_file($this->cacheFile) && !@unlink($this->cacheFile)) {
             throw new RuntimeException(sprintf('Unable to remove the cache file "%s".', $this->cacheFile));
         }
+    }
+
+    /**
+     * Whether no resource of the decorated loader has been modified since the generation of the cache file. A loader
+     * not implementing `ResourceAwareRouteLoaderInterface` has no tracked resource, so its cache file is always fresh.
+     */
+    private function isFresh(): bool
+    {
+        if (!$this->loader instanceof ResourceAwareRouteLoaderInterface) {
+            return true;
+        }
+
+        clearstatcache();
+
+        $generatedAt = filemtime($this->cacheFile);
+        if ($generatedAt === false) {
+            return false;
+        }
+
+        foreach ($this->loader->getResources() as $resource) {
+            if ($this->isModifiedSince($resource, $generatedAt)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Modification times have a one-second precision, so a resource modified during the second the cache file was
+     * generated is considered modified: the cache file may be regenerated a few times more, but never kept stale.
+     *
+     * Adding or removing a file changes the modification time of its directory, so directories are checked too.
+     */
+    private function isModifiedSince(string $resource, int $timestamp): bool
+    {
+        if (!file_exists($resource) || filemtime($resource) >= $timestamp) {
+            return true;
+        }
+
+        if (!is_dir($resource)) {
+            return false;
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($resource, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        /** @var SplFileInfo $file */
+        foreach ($iterator as $file) {
+            if ($file->getMTime() >= $timestamp) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
