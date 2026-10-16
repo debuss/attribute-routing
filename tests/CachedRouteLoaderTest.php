@@ -6,10 +6,10 @@ use LogicException;
 use PHPUnit\Framework\Attributes\{CoversClass, DataProvider};
 use PHPUnit\Framework\TestCase;
 use Routing\{AttributeRouteLoader, CachedRouteLoader, RouteDefinition};
-use Routing\Tests\Fixtures\RouteLoaderStub;
+use Routing\Tests\Fixtures\{ResourceAwareRouteLoaderStub, RouteLoaderStub};
 use RuntimeException;
 use stdClass;
-use function bin2hex, chmod, file_put_contents, function_exists, glob, ini_set, is_dir, is_writable, mkdir, opcache_get_status, random_bytes, rmdir, scandir, sys_get_temp_dir, unlink;
+use function bin2hex, chmod, file_put_contents, function_exists, glob, ini_set, is_dir, is_writable, mkdir, opcache_get_status, random_bytes, rmdir, scandir, sys_get_temp_dir, time, touch, unlink;
 
 #[CoversClass(CachedRouteLoader::class)]
 final class CachedRouteLoaderTest extends TestCase
@@ -251,6 +251,137 @@ final class CachedRouteLoaderTest extends TestCase
         $this->expectExceptionMessage('Unable to remove the cache file "' . $this->cacheFile . '".');
 
         $loader->clear();
+    }
+
+    public function testInDebugModeAnUnmodifiedCacheFileIsRead(): void
+    {
+        $stub = new ResourceAwareRouteLoaderStub([new RouteDefinition(['GET'], '/old', 'old')], $this->createResources());
+        $loader = $this->createOutdatableCache($stub, debug: true);
+
+        $stub->routes = [new RouteDefinition(['GET'], '/new', 'new')];
+
+        $this->assertSame('/old', $loader->getRouteDefinitions()[0]->path);
+        $this->assertSame(1, $stub->calls);
+    }
+
+    /**
+     * @return iterable<string, array{callable(string): mixed}>
+     */
+    public static function resourceModificationProvider(): iterable
+    {
+        yield 'file of a directory modified' => [static fn(string $base) => touch($base . '/sources/Controller.php')];
+        yield 'file of a nested directory modified' => [static fn(string $base) => touch($base . '/sources/nested/Controller.php')];
+        yield 'file added to a directory' => [static fn(string $base) => file_put_contents($base . '/sources/NewController.php', '')];
+        yield 'file added to a nested directory' => [static fn(string $base) => file_put_contents($base . '/sources/nested/NewController.php', '')];
+        yield 'file removed from a nested directory' => [static fn(string $base) => unlink($base . '/sources/nested/Controller.php')];
+        yield 'directory added' => [static fn(string $base) => mkdir($base . '/sources/other')];
+        yield 'file resource modified' => [static fn(string $base) => touch($base . '/routes.yaml')];
+        yield 'file resource removed' => [static fn(string $base) => unlink($base . '/routes.yaml')];
+    }
+
+    /**
+     * @param callable(string): mixed $modify
+     */
+    #[DataProvider('resourceModificationProvider')]
+    public function testInDebugModeTheCacheFileIsRegeneratedWhenAResourceIsModified(callable $modify): void
+    {
+        $stub = new ResourceAwareRouteLoaderStub([new RouteDefinition(['GET'], '/old', 'old')], $this->createResources());
+        $loader = $this->createOutdatableCache($stub, debug: true);
+
+        $stub->routes = [new RouteDefinition(['GET'], '/new', 'new')];
+        $modify($this->cacheDirectory);
+
+        $this->assertSame('/new', $loader->getRouteDefinitions()[0]->path);
+        $this->assertSame('/new', $this->readCache()[0]->path);
+        $this->assertSame(2, $stub->calls);
+    }
+
+    public function testInDebugModeAResourceModifiedDuringTheSecondOfTheGenerationInvalidatesTheCacheFile(): void
+    {
+        $stub = new ResourceAwareRouteLoaderStub([new RouteDefinition(['GET'], '/old', 'old')], $this->createResources());
+        $loader = $this->createOutdatableCache($stub, debug: true);
+
+        $stub->routes = [new RouteDefinition(['GET'], '/new', 'new')];
+        $generatedAt = time() - 50;
+        touch($this->cacheFile, $generatedAt);
+        touch($this->cacheDirectory . '/routes.yaml', $generatedAt);
+
+        $this->assertSame('/new', $loader->getRouteDefinitions()[0]->path);
+    }
+
+    #[DataProvider('resourceModificationProvider')]
+    public function testOutsideDebugModeModifiedResourcesAreIgnored(callable $modify): void
+    {
+        $stub = new ResourceAwareRouteLoaderStub([new RouteDefinition(['GET'], '/old', 'old')], $this->createResources());
+        $loader = $this->createOutdatableCache($stub, debug: false);
+
+        $stub->routes = [new RouteDefinition(['GET'], '/new', 'new')];
+        $modify($this->cacheDirectory);
+
+        $this->assertSame('/old', $loader->getRouteDefinitions()[0]->path);
+        $this->assertSame(1, $stub->calls);
+    }
+
+    public function testInDebugModeTheCacheFileOfALoaderWithoutResourcesIsNeverRegenerated(): void
+    {
+        $stub = new RouteLoaderStub([new RouteDefinition(['GET'], '/old', 'old')]);
+        $loader = $this->createOutdatableCache($stub, debug: true);
+        touch($this->cacheFile, 1);
+
+        $stub->routes = [new RouteDefinition(['GET'], '/new', 'new')];
+
+        $this->assertSame('/old', $loader->getRouteDefinitions()[0]->path);
+        $this->assertSame(1, $stub->calls);
+    }
+
+    public function testInDebugModeTheCacheFileOfAnAttributeRouteLoaderIsRegeneratedWhenOlderThanItsDirectory(): void
+    {
+        $attributeLoader = new AttributeRouteLoader('Routing\\Tests\\Fixtures\\Basic', __DIR__ . '/Fixtures/Basic');
+        $loader = new CachedRouteLoader($attributeLoader, $this->cacheFile, debug: true);
+
+        $this->assertTrue(@mkdir($this->cacheDirectory));
+        file_put_contents($this->cacheFile, '<?php return [];');
+
+        touch($this->cacheFile, time() + 100);
+        $this->assertSame([], $loader->getRouteDefinitions());
+
+        touch($this->cacheFile, 1);
+        $this->assertEquals($attributeLoader->getRouteDefinitions(), $loader->getRouteDefinitions());
+    }
+
+    /**
+     * Creates the resources of a loader: a `sources` directory, with a nested directory, and a `routes.yaml` file, all
+     * of them modified 100 seconds ago.
+     *
+     * @return string[]
+     */
+    private function createResources(): array
+    {
+        $sources = $this->cacheDirectory . '/sources';
+        $this->assertTrue(@mkdir($sources . '/nested', 0777, true));
+        file_put_contents($sources . '/Controller.php', '');
+        file_put_contents($sources . '/nested/Controller.php', '');
+        file_put_contents($this->cacheDirectory . '/routes.yaml', '');
+
+        // Directories last, since creating their files modified them
+        foreach (['/sources/nested/Controller.php', '/sources/Controller.php', '/routes.yaml', '/sources/nested', '/sources'] as $path) {
+            touch($this->cacheDirectory . $path, time() - 100);
+        }
+
+        return [$sources, $this->cacheDirectory . '/routes.yaml'];
+    }
+
+    /**
+     * Generates the cache file as if it was 75 seconds ago: after the resources, but before any modification made by
+     * the test, without depending on the one-second precision of modification times.
+     */
+    private function createOutdatableCache(RouteLoaderStub|ResourceAwareRouteLoaderStub $stub, bool $debug): CachedRouteLoader
+    {
+        $loader = new CachedRouteLoader($stub, $this->cacheFile, $debug);
+        $loader->warmUp();
+        touch($this->cacheFile, time() - 75);
+
+        return $loader;
     }
 
     /**

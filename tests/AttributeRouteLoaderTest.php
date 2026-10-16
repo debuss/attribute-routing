@@ -346,6 +346,13 @@ final class AttributeRouteLoaderTest extends TestCase
         $this->assertSame([], $loader->getRouteDefinitions());
     }
 
+    public function testItsResourceIsTheScannedDirectory(): void
+    {
+        $loader = new AttributeRouteLoader(self::FIXTURES_NAMESPACE, self::FIXTURES_PATH);
+
+        $this->assertSame([__DIR__ . '/Fixtures'], $loader->getResources());
+    }
+
     /**
      * @return iterable<string, array{string}>
      */
