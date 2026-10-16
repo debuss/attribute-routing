@@ -42,6 +42,7 @@ final class RouteTest extends TestCase
         yield 'several methods' => [['GET', 'POST'], ['GET', 'POST']];
         yield 'lowercase methods are uppercased' => [['get', 'Post'], ['GET', 'POST']];
         yield 'array keys are dropped' => [['read' => 'GET', 'write' => 'POST'], ['GET', 'POST']];
+        yield 'duplicates are removed' => [['GET', 'POST', 'get', 'GET'], ['GET', 'POST']];
     }
 
     /**

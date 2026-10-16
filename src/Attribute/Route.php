@@ -4,7 +4,7 @@ namespace Routing\Attribute;
 
 use Attribute;
 use InvalidArgumentException;
-use function array_map, array_values, count, is_string, strtoupper;
+use function array_map, array_unique, array_values, count, is_string, strtoupper;
 
 /**
  * Identifies a method that supports a given set of HTTP methods.
@@ -19,7 +19,7 @@ class Route
     public readonly array $methods;
 
     /**
-     * @param string|string[] $methods One or several HTTP methods, case-insensitive.
+     * @param string|string[] $methods One or several HTTP methods, case-insensitive, duplicates are removed.
      * @throws InvalidArgumentException If no HTTP method is given.
      */
     public function __construct(
@@ -34,6 +34,6 @@ class Route
             throw new InvalidArgumentException('A route must define at least one HTTP method.');
         }
 
-        $this->methods = array_map(strtoupper(...), $methods);
+        $this->methods = array_values(array_unique(array_map(strtoupper(...), $methods)));
     }
 }

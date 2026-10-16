@@ -2,16 +2,19 @@
 
 namespace Routing\Tests\Fixtures\Paths;
 
-use Routing\Attribute\{AsController, Get};
+use Routing\Attribute\{AsController, Get, Post, Put};
 
+/**
+ * Each path variant uses its own HTTP method, otherwise the routes would conflict.
+ */
 #[AsController]
 class NoPrefixController
 {
 
     #[Get('/users', name: 'no-prefix.leading-slash')]
-    #[Get('users/', name: 'no-prefix.trailing-slash')]
+    #[Post('users/', name: 'no-prefix.trailing-slash')]
     #[Get('/', name: 'no-prefix.root')]
-    #[Get('', name: 'no-prefix.empty')]
-    #[Get(name: 'no-prefix.omitted')]
+    #[Post('', name: 'no-prefix.empty')]
+    #[Put(name: 'no-prefix.omitted')]
     public function index(): void {}
 }
