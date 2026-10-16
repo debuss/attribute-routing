@@ -220,6 +220,15 @@ Only route handlers made of scalars, `null` and arrays of them can be cached (`A
 - Route attributes must be set on **public** methods, otherwise a `LogicException` is thrown.
 - An `InvalidArgumentException` is thrown if the given path is not an existing directory.
 
+### Conflicts
+
+A `LogicException`, naming both handlers, is thrown if two routes:
+
+- have the same name (routes without name never conflict),
+- or have the same HTTP method and the same path, once normalized: `#[Get('/')]` and `#[Get('')]` on a controller prefixed with `/users` both define `GET /users`.
+
+Paths are compared as strings: routes that only differ by their parameter names, like `/users/{id}` and `/users/{slug}`, are not detected as conflicting, since whether they conflict depends on your router (for instance on the parameter patterns).
+
 ---
 
 ## Route path building
@@ -257,7 +266,7 @@ class UserController
 }
 ```
 
-Priorities can be negative. The order of routes sharing the same priority is not guaranteed: use priorities when the registration order matters.
+Priorities can be negative. Routes sharing the same priority are returned in a deterministic order: sorted by controller class name, then by method: first the methods declared in the controller, in their order of declaration, then the methods inherited from a parent class or coming from a trait, by name. Several route attributes on a method keep their order of declaration. The order depends neither on the filesystem nor on the PHP version, so it is the same on every machine and the cache files of `CachedRouteLoader` are reproducible. Still, use priorities when the registration order matters, rather than relying on class names.
 
 ---
 
@@ -335,7 +344,7 @@ foreach ($loader->getRouteDefinitions() as $route) {
 
 ## Route attributes reference
 
-`#[Route]` maps a method to one or several HTTP methods (case-insensitive, normalized to uppercase):
+`#[Route]` maps a method to one or several HTTP methods (case-insensitive, normalized to uppercase, duplicates removed):
 
 ```php
 #[Route(

@@ -13,7 +13,7 @@ use Routing\Attribute\{AsController, Middleware, Route};
 use ReflectionException;
 use ReflectionMethod;
 use SplFileInfo;
-use function array_filter, array_map, array_merge, class_exists, count, explode, implode, interface_exists, is_dir, rtrim, sprintf, str_replace, strlen, substr, trait_exists, trim, usort;
+use function array_filter, array_map, array_merge, class_exists, count, explode, implode, interface_exists, is_dir, rtrim, sort, sprintf, str_replace, strlen, substr, trait_exists, trim, usort;
 
 readonly class AttributeRouteLoader implements RouteLoaderInterface
 {
@@ -37,7 +37,8 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
     /**
      * @return RouteDefinition[]
      * @throws LogicException|ReflectionException If a controller attribute is set on an interface, a trait, an enum or
-     *                                            an abstract class, or if a route attribute is set on a non-public method.
+     *                                            an abstract class, if a route attribute is set on a non-public method,
+     *                                            or if two routes have the same name, or the same HTTP method and path.
      */
     public function getRouteDefinitions(): array
     {
@@ -45,7 +46,7 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
             new RecursiveDirectoryIterator($this->path, FilesystemIterator::SKIP_DOTS)
         );
 
-        $routeDefinitions = [];
+        $classNames = [];
 
         /** @var SplFileInfo $file */
         foreach ($iterator as $file) {
@@ -55,8 +56,15 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
 
             // Convert file path to Class Name (PSR-4 assumption)
             $relativePath = substr($file->getPathname(), strlen($this->path) + 1, -strlen('.php'));
-            $className = $this->namespace . str_replace(['/', '\\'], '\\', $relativePath);
+            $classNames[] = $this->namespace . str_replace(['/', '\\'], '\\', $relativePath);
+        }
 
+        // The filesystem iteration order is not guaranteed, sorting the class names makes the routes order deterministic
+        sort($classNames, SORT_STRING);
+
+        $routeDefinitions = [];
+
+        foreach ($classNames as $className) {
             // The autoloader is only triggered once, by class_exists()
             if (!class_exists($className) && !interface_exists($className, false) && !trait_exists($className, false)) {
                 continue;
@@ -87,7 +95,7 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
             $controllerPrefix = trim($controller->prefix, '/');
             $controllerMiddlewares = $this->getMiddlewares($reflectionClass);
 
-            foreach ($reflectionClass->getMethods() as $method) {
+            foreach ($this->getSortedMethods($reflectionClass) as $method) {
                 $attributes = $method->getAttributes(Route::class, ReflectionAttribute::IS_INSTANCEOF);
 
                 if (count($attributes) === 0) {
@@ -127,9 +135,76 @@ readonly class AttributeRouteLoader implements RouteLoaderInterface
             }
         }
 
+        $this->checkConflicts($routeDefinitions);
+
+        // usort() is stable: routes sharing the same priority keep their discovery order
         usort($routeDefinitions, fn(RouteDefinition $a, RouteDefinition $b) => $b->priority <=> $a->priority);
 
         return $routeDefinitions;
+    }
+
+    /**
+     * The order of `ReflectionClass::getMethods()` differs between PHP versions for the methods coming from traits and
+     * parent classes, so the methods are sorted explicitly: first the methods declared in the controller file, in their
+     * order of declaration, then the other ones (inherited or from traits) by name.
+     *
+     * @param ReflectionClass<object> $reflectionClass
+     * @return ReflectionMethod[]
+     */
+    private function getSortedMethods(ReflectionClass $reflectionClass): array
+    {
+        $sortKey = fn(ReflectionMethod $method) => $method->getFileName() === $reflectionClass->getFileName()
+            ? [0, (int)$method->getStartLine(), '']
+            : [1, 0, $method->getName()];
+
+        $methods = $reflectionClass->getMethods();
+        usort($methods, fn(ReflectionMethod $a, ReflectionMethod $b) => $sortKey($a) <=> $sortKey($b));
+
+        return $methods;
+    }
+
+    /**
+     * @param RouteDefinition[] $routeDefinitions
+     * @throws LogicException If two routes have the same name, or the same HTTP method and path.
+     */
+    private function checkConflicts(array $routeDefinitions): void
+    {
+        $handlersByName = [];
+        $handlersByMethodAndPath = [];
+
+        foreach ($routeDefinitions as $routeDefinition) {
+            /** @var array{class-string, string} $handler */
+            $handler = $routeDefinition->handler;
+            $handler = sprintf('%s::%s()', ...$handler);
+
+            if ($routeDefinition->name !== '') {
+                if (isset($handlersByName[$routeDefinition->name])) {
+                    throw new LogicException(sprintf(
+                        'The route name "%s" is used by both "%s" and "%s".',
+                        $routeDefinition->name,
+                        $handlersByName[$routeDefinition->name],
+                        $handler
+                    ));
+                }
+
+                $handlersByName[$routeDefinition->name] = $handler;
+            }
+
+            foreach ($routeDefinition->methods as $method) {
+                $methodAndPath = $method . ' ' . $routeDefinition->path;
+
+                if (isset($handlersByMethodAndPath[$methodAndPath])) {
+                    throw new LogicException(sprintf(
+                        'The route "%s" is defined by both "%s" and "%s".',
+                        $methodAndPath,
+                        $handlersByMethodAndPath[$methodAndPath],
+                        $handler
+                    ));
+                }
+
+                $handlersByMethodAndPath[$methodAndPath] = $handler;
+            }
+        }
     }
 
     /**

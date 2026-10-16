@@ -18,7 +18,7 @@ use Routing\Tests\Fixtures\NotAConcreteClass\AbstractType\AbstractController;
 use Routing\Tests\Fixtures\NotAConcreteClass\EnumType\EnumController;
 use Routing\Tests\Fixtures\NotAConcreteClass\InterfaceType\InterfaceController;
 use Routing\Tests\Fixtures\NotAConcreteClass\TraitType\TraitController;
-use function array_column, implode, ksort, sort, sprintf, str_replace;
+use function array_column, array_map, implode, ksort, sort, sprintf, str_replace;
 
 #[CoversClass(AttributeRouteLoader::class)]
 final class AttributeRouteLoaderTest extends TestCase
@@ -196,6 +196,88 @@ final class AttributeRouteLoaderTest extends TestCase
         );
     }
 
+    public function testRoutesSharingTheSamePriorityAreSortedByClassNameThenByMethod(): void
+    {
+        $this->assertSame(
+            [
+                'GET /admin/dashboard ' . DashboardController::class . '::index admin.dashboard 0',
+                'GET /admin/health ' . DashboardController::class . '::health  0',
+                'GET /api/v1/products/{id} ' . ProductController::class . '::show products.show 0',
+                'HEAD /api/v1/products/{id} ' . ProductController::class . '::show products.head 0',
+                'PUT /api/v1/products/{id} ' . ProductController::class . '::update  0',
+                'PATCH /api/v1/products/{id} ' . ProductController::class . '::update  0',
+                'OPTIONS /api/v1/products ' . ProductController::class . '::options  0',
+                'GET /child/from-trait ' . ChildController::class . '::fromTrait from-trait 0',
+                'GET /child/inherited ' . ChildController::class . '::inherited inherited 0',
+                'GET /users ' . UserController::class . '::index users.index 0',
+                'GET /users/{id} ' . UserController::class . '::show users.show 0',
+                'POST /users ' . UserController::class . '::store users.store 0',
+                'DELETE /users/{id} ' . UserController::class . '::destroy users.destroy 0',
+                'GET,POST /users/search ' . UserController::class . '::search users.search 0',
+            ],
+            $this->describe($this->load('Basic'), sort: false)
+        );
+    }
+
+    public function testTheMethodsDeclaredInTheControllerComeFirstThenTheOtherOnesByName(): void
+    {
+        $this->assertSame(
+            ['GET /order/own-z', 'POST /order/own-a', 'GET /order/own-a', 'GET /order/parent-a', 'GET /order/parent-b', 'GET /order/trait-a', 'GET /order/trait-z'],
+            array_map(
+                fn(RouteDefinition $route) => implode(',', $route->methods) . ' ' . $route->path,
+                $this->load('Order')
+            )
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function conflictProvider(): iterable
+    {
+        $namespace = 'Routing\\Tests\\Fixtures\\Conflicts\\';
+
+        yield 'same name' => [
+            'Conflicts/DuplicateName',
+            'The route name "duplicate" is used by both "' . $namespace . 'DuplicateName\\FirstController::index()" and "' . $namespace . 'DuplicateName\\SecondController::index()".',
+        ];
+        yield 'same HTTP method and path' => [
+            'Conflicts/DuplicateMethodAndPath',
+            'The route "GET /same" is defined by both "' . $namespace . 'DuplicateMethodAndPath\\FirstController::index()" and "' . $namespace . 'DuplicateMethodAndPath\\SecondController::index()".',
+        ];
+        yield 'same HTTP method and path once normalized' => [
+            'Conflicts/DuplicateAfterNormalization',
+            'The route "GET /users" is defined by both "' . $namespace . 'DuplicateAfterNormalization\\UserController::index()" and "' . $namespace . 'DuplicateAfterNormalization\\UserController::list()".',
+        ];
+        yield 'same route attribute repeated on a method' => [
+            'Conflicts/RepeatedAttribute',
+            'The route "GET /users/{id}" is defined by both "' . $namespace . 'RepeatedAttribute\\UserController::show()" and "' . $namespace . 'RepeatedAttribute\\UserController::show()".',
+        ];
+    }
+
+    #[DataProvider('conflictProvider')]
+    public function testConflictingRoutesThrowAnException(string $fixture, string $message): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage($message);
+
+        $this->load($fixture);
+    }
+
+    public function testRoutesThatDoNotConflictAreLoaded(): void
+    {
+        $routes = array_map(
+            fn(RouteDefinition $route) => implode(',', $route->methods) . ' ' . $route->path,
+            $this->load('Conflicts/None')
+        );
+        sort($routes);
+
+        $this->assertSame(
+            ['GET /items', 'GET /items/deduplicated', 'GET /items/{id}', 'GET /items/{slug}', 'GET /other', 'HEAD /items', 'POST /items'],
+            $routes
+        );
+    }
+
     /**
      * @return iterable<string, array{string, string}>
      */
@@ -297,13 +379,13 @@ final class AttributeRouteLoaderTest extends TestCase
     }
 
     /**
-     * Turns route definitions into sorted, human-readable strings, so that assertions do not depend on the
-     * filesystem iteration order (which is not guaranteed) and failures display a readable diff.
+     * Turns route definitions into human-readable strings, sorted by default so that assertions do not depend on the
+     * routes order, and failures display a readable diff.
      *
      * @param RouteDefinition[] $routes
      * @return string[]
      */
-    private function describe(array $routes): array
+    private function describe(array $routes, bool $sort = true): array
     {
         $descriptions = [];
         foreach ($routes as $route) {
@@ -319,8 +401,11 @@ final class AttributeRouteLoaderTest extends TestCase
             ]);
         }
 
-        sort($descriptions);
+        if ($sort) {
+            sort($descriptions);
+        }
 
         return $descriptions;
     }
+
 }

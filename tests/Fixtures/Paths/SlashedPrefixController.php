@@ -2,15 +2,18 @@
 
 namespace Routing\Tests\Fixtures\Paths;
 
-use Routing\Attribute\{AsController, Get};
+use Routing\Attribute\{AsController, Delete, Get, Options, Patch};
 
+/**
+ * Each path variant uses its own HTTP method, otherwise the routes would conflict (with `NoPrefixController` too).
+ */
 #[AsController(prefix: '/users')]
 class SlashedPrefixController
 {
 
-    #[Get('/', name: 'slashed-prefix.root')]
-    #[Get('', name: 'slashed-prefix.empty')]
-    #[Get(name: 'slashed-prefix.omitted')]
+    #[Patch('/', name: 'slashed-prefix.root')]
+    #[Delete('', name: 'slashed-prefix.empty')]
+    #[Options(name: 'slashed-prefix.omitted')]
     #[Get('/{id}', name: 'slashed-prefix.param')]
     public function index(): void {}
 }
